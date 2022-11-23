@@ -4,7 +4,8 @@
   "description": "Resolve an IPFS path using multiple gateways and methods to get data the fastest.",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "ts-mocha  src/test.ts"
   },
   "repository": {
     "type": "git",
@@ -17,9 +18,15 @@
   },
   "homepage": "https://github.com/Frame-One-Software/ipfs-race#readme",
   "devDependencies": {
+    "@types/chai": "^4.3.4",
+    "@types/expect": "^24.3.0",
+    "@types/mocha": "^10.0.0",
+    "chai": "^4.3.7",
+    "mocha": "^10.1.0",
+    "ts-mocha": "^10.0.0",
     "typescript": "^4.9.3"
   },
   "dependencies": {
-    "is-ipfs": "^7.0.3"
+    "is-ipfs": "6.0.2"
   }
 }
