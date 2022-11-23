@@ -8,7 +8,7 @@ interface ResolveOptions {
     defaultProtocolIfUnspecified: "ipfs" | "ipns";
 }
 
-const defaultResolveOptions: ResolveOptions = {
+const defaultResolveOptions: Required<ResolveOptions> = {
     ipfsGateways: defaultIpfsGateways,
     ipnsGateways: defaultIpnsGateways,
     defaultProtocolIfUnspecified: "ipfs"
@@ -43,27 +43,30 @@ interface ResolveOutput {
 async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOutput> {
 
     // merge the options with the default options
-    const _options: ResolveOptions = {
+    const _options: Required<ResolveOptions> = {
         ...defaultResolveOptions,
         ...(options || {})
     };
 
-    let gatewayConcat: string;
+    let gatewaySuffix: string;
+    let protocol: "ipfs" | "ipns" = _options.defaultProtocolIfUnspecified;
 
     // determine what type of uri was passed in
     // CID or CID with path passed in directly
     if (isIPFS.cid(uri) || isIPFS.cidPath(uri)) {
-        gatewayConcat = `/${_options.defaultProtocolIfUnspecified}/${uri}`;
+        gatewaySuffix = `/${protocol}/${uri}`;
     }
 
     // ipfs path passed in
     else if (isIPFS.ipfsPath(uri)) {
-        gatewayConcat = `/ipfs/${uri}`;
+        protocol = "ipns";
+        gatewaySuffix = `/${protocol}/${uri}`;
     }
 
     // ipns path passed in
     else if (isIPFS.ipnsPath(uri)) {
-        gatewayConcat = `/ipns/${uri}`;
+        protocol = "ipns";
+        gatewaySuffix = `/${protocol}/${uri}`;
     }
 
     // check to see if uri is a link to a gateway and ipfs
@@ -76,16 +79,13 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         } while (tmp.includes("/") && !isIPFS.path(uri));
 
         // determine the correct protocol
-        let protocol: "ipfs" | "ipns";
         if (isIPFS.ipfsPath(tmp)) {
             protocol = "ipfs";
         } else if (isIPFS.ipnsPath(tmp)) {
             protocol = "ipns";
-        } else {
-            protocol = _options.defaultProtocolIfUnspecified;
         }
 
-        gatewayConcat = `/${protocol}/${tmp}`;
+        gatewaySuffix = `/${protocol}/${tmp}`;
     }
 
     // check to see if the link has the ipfs:// or ipns:// protocol/scheme
@@ -97,16 +97,13 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
             throw new Error(`The uri (${uri}) passed in was malformed.`);
         }
 
-        let protocol: "ipfs" | "ipns";
         if ((uri as string).startsWith("ipfs://")) {
             protocol = "ipfs";
         } else if ((uri as string).startsWith("ipns://")) {
             protocol = "ipns";
-        } else {
-            protocol = _options.defaultProtocolIfUnspecified;
         }
 
-        gatewayConcat = `/${protocol}/${cidWithOptionalPath}`;
+        gatewaySuffix = `/${protocol}/${cidWithOptionalPath}`;
     }
 
     // check to see if the uri is just a regular url that we can request
@@ -122,9 +119,28 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         throw new Error(`The uri (${uri}) passed in was malformed.`);
     }
 
-    async function requestFromGateway(gatewayUrl: string): Response {
-        
-    }
+    // determine if we are using ipfs or ipns gateways
+    const gateways: string[] = protocol === "ipfs" ? _options.ipfsGateways : _options.ipnsGateways;
+
+    // create an abort controller to stop the fetch requests when the first one is resolved.
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    // create a promise to each gateway
+    const promises = gateways.map(async (gatewayUrl): Promise<ResolveOutput> => {
+        const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
+        const response = await  fetch(urlResolvedFrom, {
+            method: "get",
+            signal,
+        });
+        return {
+            response,
+            urlResolvedFrom
+        }
+    })
+
+    // get the first response from the gateway
+    return await Promise.race(promises);
 }
 
 export {
