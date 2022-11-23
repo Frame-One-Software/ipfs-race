@@ -1,0 +1,25 @@
+{
+  "name": "ipfs-race",
+  "version": "0.1.0",
+  "description": "Resolve an IPFS path using multiple gateways and methods to get data the fastest.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Frame-One-Software/ipfs-race.git"
+  },
+  "author": "Frame One Software Inc. <christopher@frameonesoftware.com>",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/Frame-One-Software/ipfs-race/issues"
+  },
+  "homepage": "https://github.com/Frame-One-Software/ipfs-race#readme",
+  "devDependencies": {
+    "typescript": "^4.9.3"
+  },
+  "dependencies": {
+    "is-ipfs": "^7.0.3"
+  }
+}
