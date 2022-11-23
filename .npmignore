@@ -1,0 +1,6 @@
+.idea
+.github
+.gitignore
+node_modules
+src
+README.md
