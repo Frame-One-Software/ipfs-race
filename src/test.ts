@@ -30,6 +30,16 @@ describe("Tests the ipfs-race library.", () => {
         expect(await response.json(), urlResolvedFrom).to.deep.equal(testCidWithPathResult)
     });
 
+    it("ipfs protocol with no path", async () => {
+        const {response, urlResolvedFrom} = await resolve(`ipfs:///${testCidWithNoPath}`);
+        expect(await response.json(), urlResolvedFrom).to.deep.equal(testCidWithNoPathResult)
+    });
+
+    it("ipfs protocol with path", async () => {
+        const {response, urlResolvedFrom} = await resolve(`ipfs:///${testCidWithPath}`);
+        expect(await response.json(), urlResolvedFrom).to.deep.equal(testCidWithPathResult)
+    });
+
     it("check that each default ipfs gateway to be a valid url", () => {
         for (const url of defaultIpfsGateways) {
             expect(isValidHttpUrl(url)).to.be.true;

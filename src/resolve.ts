@@ -94,8 +94,9 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // check to see if the link has the ipfs:// or ipns:// protocol/scheme
     else if ((uri as string).startsWith("ipfs://") || (uri as string).startsWith("ipns://")) {
 
+        const cidWithOptionalPath = (uri as string).substring(8);
+
         // check to see if the CID after the ipfs protocal/scheme is valid
-        const cidWithOptionalPath = (uri as string).substring(7);
         if (!isIPFS.cid(cidWithOptionalPath) && !isIPFS.cidPath(cidWithOptionalPath)) {
             throw new Error(`The uri (${uri}) passed in was malformed.`);
         }
@@ -107,6 +108,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         }
 
         gatewaySuffix = `/${protocol}/${cidWithOptionalPath}`;
+
     }
 
     // check to see if the uri is just a regular url that we can request
