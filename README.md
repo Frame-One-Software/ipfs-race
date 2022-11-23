@@ -2,8 +2,8 @@
 
 Resolve an IPFS path using multiple gateways and methods to get data the fastest.
 
-```
-npm install ipfs-race
+```bash
+npm i ipfs-race
 ```
 
 ```typescript
