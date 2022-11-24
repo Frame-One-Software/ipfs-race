@@ -1,17 +1,23 @@
 import * as isIPFS from 'is-ipfs'
 import {defaultIpfsGateways, defaultIpnsGateways} from "./defaultGateways";
 import {isValidHttpUrl} from "./isValidHttpUrl";
+import any from "promise.any";
+import { AbortController } from "node-abort-controller";
+
+export type FetchType = (input: RequestInfo | URL , init?: RequestInit) => Promise<Response>;
 
 interface ResolveOptions {
     ipfsGateways?: string[];
     ipnsGateways?: string[];
-    defaultProtocolIfUnspecified: "ipfs" | "ipns";
+    defaultProtocolIfUnspecified?: "ipfs" | "ipns";
+    fetchOverride?: FetchType;
 }
 
 const defaultResolveOptions: Required<ResolveOptions> = {
     ipfsGateways: defaultIpfsGateways,
     ipnsGateways: defaultIpnsGateways,
-    defaultProtocolIfUnspecified: "ipfs"
+    defaultProtocolIfUnspecified: "ipfs",
+    fetchOverride: globalThis?.fetch
 }
 
 interface ResolveOutput {
@@ -47,6 +53,10 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         ...defaultResolveOptions,
         ...(options || {})
     };
+
+    if (!_options.fetchOverride) {
+        throw new Error("Fetch library not found, please pass in 'fetchOverride'. If you are running in the browser, this will likely be window.fetch, if in a node version >16.x.x it is global. If importing before 16.x.x then you will likely need to install 'node-fetch'.");
+    }
 
     let gatewaySuffix: string;
     let protocol: "ipfs" | "ipns" = _options.defaultProtocolIfUnspecified;
@@ -113,7 +123,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
 
     // check to see if the uri is just a regular url that we can request
     else if (isValidHttpUrl(uri)) {
-        const response = await fetch(uri, {
+        const response: Response = await fetch(uri, {
             method: "get",
         });
 
@@ -147,10 +157,10 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         abortControllers[i] = controller;
 
         const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
-        const response = await fetch(urlResolvedFrom, {
+        const response = await _options.fetchOverride(urlResolvedFrom, {
             method: "get",
             signal,
-        });
+        } as RequestInit);
 
         // remove the abort controller for the completed response
         abortControllers[i] = undefined;
@@ -168,7 +178,13 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     })
 
     // get the first response from the gateway
-    const result = await Promise.any(promises);
+    let result: ResolveOutput;
+    try {
+        result = await any(promises);
+    } catch (err: AggregateError) {
+        err.errors.forEach(console.error);
+        throw err;
+    }
 
     // abort all the other requests
     for (const abortController of abortControllers) {
