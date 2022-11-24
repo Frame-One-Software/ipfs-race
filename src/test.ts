@@ -31,12 +31,12 @@ describe("Tests the ipfs-race library.", () => {
     });
 
     it("ipfs protocol with no path", async () => {
-        const {response, urlResolvedFrom} = await resolve(`ipfs:///${testCidWithNoPath}`);
+        const {response, urlResolvedFrom} = await resolve(`ipfs://${testCidWithNoPath}`);
         expect(await response.json(), urlResolvedFrom).to.deep.equal(testCidWithNoPathResult)
     });
 
     it("ipfs protocol with path", async () => {
-        const {response, urlResolvedFrom} = await resolve(`ipfs:///${testCidWithPath}`);
+        const {response, urlResolvedFrom} = await resolve(`ipfs://${testCidWithPath}`);
         expect(await response.json(), urlResolvedFrom).to.deep.equal(testCidWithPathResult)
     });
 

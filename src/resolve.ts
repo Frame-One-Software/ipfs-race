@@ -104,7 +104,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // check to see if the link has the ipfs:// or ipns:// protocol/scheme
     else if ((uri as string).startsWith("ipfs://") || (uri as string).startsWith("ipns://")) {
 
-        const cidWithOptionalPath = (uri as string).substring(8);
+        const cidWithOptionalPath = (uri as string).substring(7);
 
         // check to see if the CID after the ipfs protocal/scheme is valid
         if (!isIPFS.cid(cidWithOptionalPath) && !isIPFS.cidPath(cidWithOptionalPath)) {
