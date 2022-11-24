@@ -178,13 +178,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     })
 
     // get the first response from the gateway
-    let result: ResolveOutput;
-    try {
-        result = await any(promises);
-    } catch (err: AggregateError) {
-        err.errors.forEach(console.error);
-        throw err;
-    }
+    const result = await any(promises);
 
     // abort all the other requests
     for (const abortController of abortControllers) {
