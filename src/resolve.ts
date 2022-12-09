@@ -151,29 +151,34 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // create a promise to each gateway
     const promises = gateways.map(async (gatewayUrl, i): Promise<ResolveOutput> => {
 
-        // create an abort controller to stop the fetch requests when the first one is resolved.
-        const controller = new AbortController();
-        const signal = controller.signal;
-        abortControllers[i] = controller;
+        try {
+            // create an abort controller to stop the fetch requests when the first one is resolved.
+            const controller = new AbortController();
+            const signal = controller.signal;
+            abortControllers[i] = controller;
 
-        const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
-        const response = await _options.fetchOverride(urlResolvedFrom, {
-            method: "get",
-            signal,
-        } as RequestInit);
+            const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
+            const response = await _options.fetchOverride(urlResolvedFrom, {
+                method: "get",
+                signal,
+            } as RequestInit);
 
-        // remove the abort controller for the completed response
-        abortControllers[i] = undefined;
+            // remove the abort controller for the completed response
+            abortControllers[i] = undefined;
 
-        // check the response because a lot of gateways will do redirects and other checks which will not be compatible
-        // with this library
-        if(response.status >= 300 || response.status < 200) {
-            throw new Error(`Url (${urlResolvedFrom}) did not return a 2xx response`);
-        }
+            // check the response because a lot of gateways will do redirects and other checks which will not be compatible
+            // with this library
+            if(response.status >= 300 || response.status < 200) {
+                throw new Error(`Url (${urlResolvedFrom}) did not return a 2xx response`);
+            }
 
-        return {
-            response,
-            urlResolvedFrom
+            return {
+                response,
+                urlResolvedFrom
+            }
+        } catch (err) {
+            console.error(gatewayUrl, err);
+            throw err;
         }
     })
 
