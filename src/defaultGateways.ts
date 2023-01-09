@@ -6,7 +6,6 @@ const defaultIpfsGateways: string[] = [
     "https://4everland.io",
     "https://w3s.link",
     "https://dweb.link",
-    "https://ipfs.runfission.com",
     "https://ipfs-gateway.cloud",
 ];
 
