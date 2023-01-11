@@ -11,13 +11,15 @@ interface ResolveOptions {
     ipnsGateways?: string[];
     defaultProtocolIfUnspecified?: "ipfs" | "ipns";
     fetchOverride?: FetchType;
+    logErrors?: boolean;
 }
 
 const defaultResolveOptions: Required<ResolveOptions> = {
     ipfsGateways: defaultIpfsGateways,
     ipnsGateways: defaultIpnsGateways,
     defaultProtocolIfUnspecified: "ipfs",
-    fetchOverride: globalThis?.fetch
+    fetchOverride: globalThis?.fetch,
+    logErrors: false,
 }
 
 interface ResolveOutput {
@@ -168,7 +170,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
 
             // check the response because a lot of gateways will do redirects and other checks which will not be compatible
             // with this library
-            if(response.status >= 300 || response.status < 200) {
+            if (response.status >= 300 || response.status < 200) {
                 throw new Error(`Url (${urlResolvedFrom}) did not return a 2xx response`);
             }
 
@@ -177,7 +179,9 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
                 urlResolvedFrom
             }
         } catch (err) {
-            console.error(gatewayUrl, err);
+            if (_options.logErrors) {
+                console.error(gatewayUrl, err);
+            }
             throw err;
         }
     })
@@ -188,7 +192,13 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // abort all the other requests
     for (const abortController of abortControllers) {
         if (abortController) {
-            abortController.abort()
+            try {
+                abortController.abort()
+            } catch (err) {
+                if (_options.logErrors) {
+                    throw err;
+                }
+            }
         }
     }
 
