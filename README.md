@@ -19,3 +19,15 @@ resolve("QmaiJczLW9X1Gk7rQH7CgYCuquLZMbdWB6hhqznDBoqdLE")
   })
   .catch(console.error);
 ```
+
+## Node-Fetch Support
+If using this library in `<16.x.x` versions of node on a backend and not a browser, then you will need to use [node-fetch](https://www.npmjs.com/package/node-fetch). However, only versions `<=2.6.6` will work automatically. If you are using `>2.6.6` then you will need to pass in your fetch function manually.
+
+```typescript
+import {resolve} from "ipfs-race";
+import fetch from "node-fetch";
+
+resolve("QmaiJczLW9X1Gk7rQH7CgYCuquLZMbdWB6hhqznDBoqdLE", {fetchOverride: fetch})
+  .then(...)
+  .catch(console.error);
+```

@@ -7,6 +7,7 @@ const defaultIpfsGateways: string[] = [
     "https://w3s.link",
     "https://dweb.link",
     "https://ipfs-gateway.cloud",
+    "https://w3s.link"
 ];
 
 const defaultIpnsGateways: string[] = [

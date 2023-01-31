@@ -2,9 +2,9 @@ import * as isIPFS from 'is-ipfs'
 import {defaultIpfsGateways, defaultIpnsGateways} from "./defaultGateways";
 import {isValidHttpUrl} from "./isValidHttpUrl";
 import any from "promise.any";
-import { AbortController } from "node-abort-controller";
+import {AbortController} from "node-abort-controller";
 
-export type FetchType = (input: RequestInfo | URL , init?: RequestInit) => Promise<Response>;
+export type FetchType = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 interface ResolveOptions {
     ipfsGateways?: string[];
@@ -14,11 +14,10 @@ interface ResolveOptions {
     logErrors?: boolean;
 }
 
-const defaultResolveOptions: Required<ResolveOptions> = {
+const defaultResolveOptions: Required<Omit<ResolveOptions, "fetchOverride">> = {
     ipfsGateways: defaultIpfsGateways,
     ipnsGateways: defaultIpnsGateways,
     defaultProtocolIfUnspecified: "ipfs",
-    fetchOverride: globalThis?.fetch,
     logErrors: false,
 }
 
@@ -45,24 +44,53 @@ interface ResolveOutput {
  *      - ipfs://<CID>/<path>
  *      - ipns://<CID>
  *      - ipns://<CID>/<path>
- *      - https(s)://<regular url> - this will resolve an http request for a generic url
+ *      - https(s)://<regular url> - this will resolve a http request for a generic url
  * @param options
  */
 async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOutput> {
 
-    // merge the options with the default options
-    const _options: Required<ResolveOptions> = {
-        ...defaultResolveOptions,
-        ...(options || {})
-    };
+    // The library will check many common spots for a fetch object. Depending on the ecosystem, lots of these variables don't
+    // exist and throw errors, so I put them in try catch block.
+    let fetchOverride: FetchType | undefined = options?.fetchOverride;
+    if (!options?.fetchOverride) {
+        try {
+            fetchOverride = globalThis.fetch;
+        } catch (err) {
+        }
 
-    if (!_options.fetchOverride) {
+
+        if (!fetchOverride) {
+            try {
+                fetchOverride = window.fetch.bind(window);
+            } catch (err) {
+            }
+        }
+
+        if (!fetchOverride) {
+            try {
+                // This will only work in node-fetch <= 2.6.6
+                fetchOverride = await import("node-fetch") as unknown as FetchType;
+            } catch (err) {
+                console.error(err)
+            }
+        }
+    }
+
+    if (!fetchOverride) {
         throw new Error("Fetch library not found, please pass in 'fetchOverride'. If you are running in the browser, this will likely be window.fetch, if in a node version >16.x.x it is global. If importing before 16.x.x then you will likely need to install 'node-fetch'.");
     }
 
+    // merge the options with the default options
+    const _options: Required<ResolveOptions> = {
+        ...defaultResolveOptions,
+        fetchOverride,
+        ...(options || {})
+    };
+
+
     let gatewaySuffix: string;
     let protocol: "ipfs" | "ipns" = _options.defaultProtocolIfUnspecified;
-
+    let callOriginalUri: boolean = isValidHttpUrl(uri);
 
     // determine what type of uri was passed in
     // CID or CID with path passed in directly
@@ -100,7 +128,22 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
             protocol = "ipns";
         }
 
-        gatewaySuffix = cid
+        if (isIPFS.path(cid)) {
+            gatewaySuffix = cid
+        } else {
+            const response: Response = await _options.fetchOverride(uri, {
+                method: "get",
+            });
+
+            if (response.status >= 300 || response.status < 200) {
+                throw new Error(`Url (${uri}) did not return a 2xx response and did not match a valid IPFS/IPNS format.`);
+            }
+
+            return {
+                response,
+                urlResolvedFrom: uri,
+            };
+        }
     }
 
     // check to see if the link has the ipfs:// or ipns:// protocol/scheme
@@ -123,13 +166,13 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
 
     }
 
-    // check to see if the uri is just a regular url that we can request
-    else if (isValidHttpUrl(uri)) {
-        const response: Response = await fetch(uri, {
+    // when all other methods fail, it is a regular URL and will be requested like normal
+    else if (callOriginalUri) {
+        const response: Response = await _options.fetchOverride(uri, {
             method: "get",
         });
 
-        if(response.status >= 300 || response.status < 200) {
+        if (response.status >= 300 || response.status < 200) {
             throw new Error(`Url (${uri}) did not return a 2xx response and did not match a valid IPFS/IPNS format.`);
         }
 
@@ -147,19 +190,58 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // determine if we are using ipfs or ipns gateways
     const gateways: string[] = protocol === "ipfs" ? _options.ipfsGateways : _options.ipnsGateways;
 
-    // keep a list of all the abortControllers that will need to be called to abort the fetch calls
-    const abortControllers = Array(gateways.length);
+    // keep a list of all the abortControllers that will need to be called to abort the fetch calls.
+    // also if we are calling the originalUri then we will expand the array by 1.
+    const abortControllers = Array(callOriginalUri ? gateways.length + 1 : gateways.length);
+
+    // keep a list of all promises for resolving
+    const promises: Promise<ResolveOutput>[] = [];
+
+    // if the original uri is a valid url, then also call it
+    if (callOriginalUri) {
+        promises.push((async (): Promise<ResolveOutput> => {
+
+            // create an abort controller to stop the fetch requests when the first one is resolved.
+            const controller = new AbortController();
+            const signal = controller.signal;
+            abortControllers[gateways.length] = controller;
+
+            const response = await _options.fetchOverride(uri, {
+                method: "get",
+                signal,
+            } as RequestInit);
+
+            // check the response because a lot of gateways will do redirects and other checks which will not be compatible
+            // with this library
+            if (response.status >= 300 || response.status < 200) {
+                throw new Error(`Url (${uri}) did not return a 2xx response`);
+            }
+
+            // remove the abort controller for the completed response
+            abortControllers[gateways.length] = undefined;
+
+            return {
+                response,
+                urlResolvedFrom: uri
+            }
+        })())
+    }
 
     // create a promise to each gateway
-    const promises = gateways.map(async (gatewayUrl, i): Promise<ResolveOutput> => {
+    promises.push(...gateways.map(async (gatewayUrl, i): Promise<ResolveOutput> => {
 
         try {
+            const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
+            // if the urlResolvedFrom is already the original URI then this can be skipped
+            if (uri === urlResolvedFrom) {
+                throw new Error(`Skipping duplicate check of the original URI`);
+            }
+
             // create an abort controller to stop the fetch requests when the first one is resolved.
             const controller = new AbortController();
             const signal = controller.signal;
             abortControllers[i] = controller;
 
-            const urlResolvedFrom = `${gatewayUrl}${gatewaySuffix}`;
             const response = await _options.fetchOverride(urlResolvedFrom, {
                 method: "get",
                 signal,
@@ -184,7 +266,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
             }
             throw err;
         }
-    })
+    }));
 
     // get the first response from the gateway
     const result = await any(promises);
