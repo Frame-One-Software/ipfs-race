@@ -32,18 +32,13 @@ interface ResolveOutput {
  * @param {string} uri - the uri on ipfs that needs to be resolved, it can follow any of the following formats...
  *      - <CID>
  *      - <CID>/<path>
- *      - ipfs/<CID>
- *      - ipfs/<CID>/path
- *      - ipns/<CID>
- *      - ipns/<CID>/path
- *      - http(s)://<gateway domain>/ipfs/<CID>
- *      - http(s)://<gateway domain>/ipfs/<CID>/<path>
- *      - http(s)://<gateway domain>/ipns/<CID>
- *      - http(s)://<gateway domain>/ipns/<CID>/<path>
- *      - ipfs://<CID>
- *      - ipfs://<CID>/<path>
- *      - ipns://<CID>
- *      - ipns://<CID>/<path>
+ *      - ip(f|n)s/<CID>
+ *      - ip(f|n)s/<CID>/path
+ *      - http(s)://<gateway domain>/ip(f|n)s/<CID>
+ *      - http(s)://<gateway domain>/ip(f|n)s/<CID>/<path>
+ *      - ip(f|n)s://<CID>
+ *      - ip(f|n)s://<CID>/<path>
+ *      - http(s)://<CID>.ip(f|n)s.<gateway domain>/<path>
  *      - https(s)://<regular url> - this will resolve a http request for a generic url
  * @param options
  */
@@ -110,6 +105,36 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         gatewaySuffix = `/${protocol}/${uri}`;
     }
 
+    // check to see if a subdomain uri
+    else if (isIPFS.ipfsSubdomain(uri) || isIPFS.ipnsSubdomain(uri)) {
+
+        // check to see if ipfs or ipns
+        if (isIPFS.ipfsSubdomain(uri)) {
+            protocol = "ipfs";
+        } else if (isIPFS.ipnsSubdomain(uri)) {
+            protocol = "ipns";
+        }
+
+        // get everything to the left of the protocol for the CID
+        let tmp = uri.split(`.${protocol}.`);
+        let cid = tmp[0];
+
+        // remove the http or https if it exists
+        if (cid.startsWith("https://")) {
+            cid = cid.replace("https://", "");
+        } else if ("http://") {
+            cid = cid.replace("http://", "");
+        }
+
+        // get everything to the right of the domain, this will be the path
+        tmp = tmp[1].split("/");
+        tmp.shift();
+        const path = tmp.join("/");
+
+        // compile into the suffix
+        gatewaySuffix = `/${protocol}/${cid}/${path}`;
+    }
+
     // check to see if uri is a link to a gateway and ipfs
     else if (isIPFS.ipfsUrl(uri) || isIPFS.ipnsUrl(uri)) {
 
@@ -128,22 +153,7 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
             protocol = "ipns";
         }
 
-        if (isIPFS.path(cid)) {
-            gatewaySuffix = cid
-        } else {
-            const response: Response = await _options.fetchOverride(uri, {
-                method: "get",
-            });
-
-            if (response.status >= 300 || response.status < 200) {
-                throw new Error(`Url (${uri}) did not return a 2xx response and did not match a valid IPFS/IPNS format.`);
-            }
-
-            return {
-                response,
-                urlResolvedFrom: uri,
-            };
-        }
+        gatewaySuffix = cid
     }
 
     // check to see if the link has the ipfs:// or ipns:// protocol/scheme
@@ -163,7 +173,6 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         }
 
         gatewaySuffix = `/${protocol}/${cidWithOptionalPath}`;
-
     }
 
     // when all other methods fail, it is a regular URL and will be requested like normal
