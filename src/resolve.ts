@@ -2,7 +2,6 @@ import * as isIPFS from 'is-ipfs'
 import {defaultIpfsGateways, defaultIpnsGateways} from "./defaultGateways";
 import {isValidHttpUrl} from "./isValidHttpUrl";
 import any from "promise.any";
-import {AbortController} from "node-abort-controller";
 
 export type FetchType = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -11,10 +10,11 @@ interface ResolveOptions {
     ipnsGateways?: string[];
     defaultProtocolIfUnspecified?: "ipfs" | "ipns";
     fetchOverride?: FetchType;
+    abortControllerOverride?: AbortController;
     logErrors?: boolean;
 }
 
-const defaultResolveOptions: Required<Omit<ResolveOptions, "fetchOverride">> = {
+const defaultResolveOptions: Required<Omit<ResolveOptions, "fetchOverride" | "abortControllerOverride">> = {
     ipfsGateways: defaultIpfsGateways,
     ipnsGateways: defaultIpnsGateways,
     defaultProtocolIfUnspecified: "ipfs",
@@ -47,12 +47,12 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
     // The library will check many common spots for a fetch object. Depending on the ecosystem, lots of these variables don't
     // exist and throw errors, so I put them in try catch block.
     let fetchOverride: FetchType | undefined = options?.fetchOverride;
+    let abortControllerOverride: AbortController | undefined = options?.abortControllerOverride;
     if (!options?.fetchOverride) {
         try {
             fetchOverride = globalThis.fetch;
         } catch (err) {
         }
-
 
         if (!fetchOverride) {
             try {
@@ -75,10 +75,32 @@ async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOu
         throw new Error("Fetch library not found, please pass in 'fetchOverride'. If you are running in the browser, this will likely be window.fetch, if in a node version >16.x.x it is global. If importing before 16.x.x then you will likely need to install 'node-fetch'.");
     }
 
+    // if we are using a version of node that has abort controllers, use them, otherwise import from node-abort-controller
+    if (!options?.abortControllerOverride) {
+        try {
+            // @ts-ignore
+            abortControllerOverride = AbortController;
+        } catch (err) {
+        }
+
+        if (!abortControllerOverride) {
+            try {
+                abortControllerOverride = await import("node-abort-controller") as unknown as AbortController;
+            } catch (err) {
+                console.error(err)
+            }
+        }
+    }
+
+    if (!abortControllerOverride) {
+        throw new Error("AbortController library not found, please pass in 'abortControllerOverride'. If you are running in the browser, this will likely be AbortController, if in a node version >16.x.x it is global. If importing before 16.x.x then you will likely need to install 'node-abort-controller'.");
+    }
+
     // merge the options with the default options
     const _options: Required<ResolveOptions> = {
         ...defaultResolveOptions,
         fetchOverride,
+        abortControllerOverride,
         ...(options || {})
     };
 
