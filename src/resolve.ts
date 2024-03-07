@@ -44,6 +44,30 @@ interface ResolveOutput {
  */
 async function resolve(uri: string, options?: ResolveOptions): Promise<ResolveOutput> {
 
+    // Check if the URI is a base64 encoded string
+    if (uri.startsWith("data:")) {
+        const base64Content = uri.split(",")[1];
+        if (!base64Content) {
+            throw new Error("Invalid base64 URI");
+        }
+        const decodedContent = Buffer.from(base64Content, 'base64').toString('utf-8');
+        let jsonResponse;
+        try {
+            jsonResponse = JSON.parse(decodedContent);
+        } catch (err) {
+            throw new Error("Failed to parse base64 encoded JSON");
+        }
+        // Mock a Response object since fetch is not actually called
+        const response = new Response(JSON.stringify(jsonResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return {
+            response,
+            urlResolvedFrom: uri,
+        };
+    }
+
     // The library will check many common spots for a fetch object. Depending on the ecosystem, lots of these variables don't
     // exist and throw errors, so I put them in try catch block.
     let fetchOverride: FetchType | undefined = options?.fetchOverride;
